@@ -1,0 +1,38 @@
+name: DevEx OSS verification
+run-name: devex/${{ inputs.run_id }}/${{ inputs.stage }}/${{ inputs.manifest_digest }}
+on:
+  workflow_dispatch:
+    inputs:
+      run_id: { required: true, type: string }
+      stage: { required: true, type: choice, options: [baseline, candidate] }
+      manifest_digest: { required: true, type: string }
+      target_sha: { required: true, type: string }
+      pull_number: { required: true, type: number }
+permissions:
+  actions: read
+  contents: read
+jobs:
+  oracle:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with: { persist-credentials: false, path: .devex-controller }
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: vmaliwal/clarity
+          ref: ${{ inputs.target_sha }}
+          persist-credentials: false
+          path: subject
+      - name: Execute sealed oracle
+        env:
+          DEVEX_GITHUB_TOKEN: ${{ github.token }}
+          DEVEX_EXPECTED_MANIFEST_DIGEST: ${{ inputs.manifest_digest }}
+          DEVEX_EXPECTED_RUN_ID: ${{ inputs.run_id }}
+          DEVEX_EXPECTED_STAGE: ${{ inputs.stage }}
+          DEVEX_EXPECTED_TARGET_SHA: ${{ inputs.target_sha }}
+          DEVEX_EXPECTED_PULL_REQUEST_NUMBER: ${{ inputs.pull_number }}
+        run: node .devex-controller/.devex/oss-verification/run.mjs
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with: { name: devex-oracle-result, path: subject/.devex/oss-verification/result.json, if-no-files-found: error, retention-days: 7 }
